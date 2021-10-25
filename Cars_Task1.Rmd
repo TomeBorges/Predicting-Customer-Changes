@@ -1,0 +1,129 @@
+---
+title: "Getting started with R"
+output: html_notebook
+---
+
+This notebook contains the answers to Task 1: Get started with R.
+
+This notebook is intended to learn the basics of R.
+
+```{r - Initial imports}
+library(readr)
+
+```
+
+
+
+
+
+```{r - Read the dataset from memory}
+df_car<- read.csv("cars.csv")
+
+```
+
+*Understand the data:*
+
+```{r - Getting to know the data}
+print("List your attributes within your data set.")
+attributes(df_car)
+print("Prints the min, max, mean, median, and quartiles of each attribute.")
+summary(df_car)
+print("Displays the structure of your data set.")
+str(df_car)
+print("Names your attributes within your data set.")
+names(df_car)
+print("Will print out the instances within that particular column in your data set.")
+df_car$speed.of.car #
+df_car$distance.of.car #Will print out the instances within that particular column in your data set.
+```
+
+```{r - Do column types coincide with their data? Or do I need to convert data types?}
+sapply(df_car, typeof)
+
+#df_car$ColumnName<-integer(df_car$ColumnName)
+
+
+
+```
+
+```{r - Rename columns}
+names(df_car)<-c("CarMaker","Speed","Dist") 
+
+```
+
+
+```{r - Are there missing values?}
+summary(df_car)
+
+any(is.na(df_car))
+
+```
+There are no missing values in the car_df, thus the chunk below is unnecessary.
+
+```{r - Address missing values}
+#na.omit(DatasetName$ColumnName#Drops any rows with missing values and omits them forever.
+#na.exclude(DatasetName$ColumnName)#Drops any rows with missing values, but keeps track of where they were.
+#DatasetName$ColumnName[is.na(DatasetName$ColumnName)]<-mean(DatasetName$ColumnName,na.rm = TRUE) #Replace the missing values with the mean
+```
+
+*Exploratory Data Analysis*
+
+```{r - Histogram plots}
+hist(df_car$Speed)
+hist(df_car$Dist)
+```
+
+
+
+```{r - Scatter (Box) Plot}
+plot(df_car$Speed,df_car$Dist)
+```
+
+
+```{r - Normal Quantile Plot}
+qqnorm(df_car$Speed)
+qqnorm(df_car$Dist)
+```
+
+As can be seen above, the relationship between distance and speed is pretty close to a line, thus a linear regression will probably yield good results when modelling one of these variables.
+
+*Creating testing and training sets:*
+
+
+
+```{r - Set seed and find row length for train and test datasets}
+set.seed(42)
+
+trainSize<-round(nrow(df_car)*0.7) #70% for train dataset
+testSize<-nrow(df_car)-trainSize #Remaining 30% for test dataset
+
+
+trainSize
+testSize
+```
+```{r - Create test and train datasets}
+training_indices<-sample(seq_len(nrow(df_car)),size =trainSize) # Select random sample of row numbers with size 'trainsize'
+
+trainSet<-df_car[training_indices,] #TrainSet will contain the selected indices.
+
+testSet<-df_car[-training_indices,] #TestSet will contain only the remaining rows that have not been selected.
+```
+
+*Linear Regression Model*
+
+```{r - Create model}
+DistModel<-lm(Dist ~ Speed-1, trainSet) # response(y) ~ terms(X)
+# used -1 to omit intercept
+summary(DistModel)
+```
+The multiple R-squared is 0.941 which is preety close to 1, this models seems to be a good fit.
+
+The p-value is clearly smaller than 0.05 meaning that the relationship between these two variables is statistically significant.
+
+Adjusted R-squared is used to determine how reliable the correlation is and how much it is determined by the addition of independent variables.
+
+```{r - Predictions}
+DistPredictions <- predict(DistModel,testSet)
+cbind(Dist_Pred = DistPredictions,Dist_real = testSet$Dist)
+```
+
