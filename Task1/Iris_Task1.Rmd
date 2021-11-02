@@ -8,7 +8,7 @@ This notebook contains the second part of Task1 Find the errors in a R script.
 This notebook is intended to learn the basics of R.
 
 ```{r - Initial imports}
-install.packages("readr")
+#install.packages("readr")
 
 library("readr")
 
@@ -45,6 +45,8 @@ plot( IrisDataset$Sepal.Length)
 plot( IrisDataset$Sepal.Width)
 plot( IrisDataset$Petal.Length)
 plot( IrisDataset$Petal.Width)
+
+plot( IrisDataset$Petal.Length, IrisDataset$Petal.Width)
 ```
 ```{r}
 #Unable to plot whole dataset as there are non numerical features. Instead plot variable by variable.
@@ -96,5 +98,6 @@ prediction
 ```
 ```{r}
 cbind(Pred_length = prediction, Real_length = testSet$Petal.Length)
+write.csv(data.frame(cbind(Pred_length = prediction, Real_length = testSet$Petal.Length)), file="sad.tab", row.names=TRUE)
 ```
 

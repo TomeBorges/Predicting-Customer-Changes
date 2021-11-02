@@ -116,7 +116,7 @@ DistModel<-lm(Dist ~ Speed-1, trainSet) # response(y) ~ terms(X)
 # used -1 to omit intercept
 summary(DistModel)
 ```
-The multiple R-squared is 0.941 which is preety close to 1, this models seems to be a good fit.
+The multiple R-squared is 0.941 which is pretty close to 1, this models seems to be a good fit.
 
 The p-value is clearly smaller than 0.05 meaning that the relationship between these two variables is statistically significant.
 
@@ -127,3 +127,24 @@ DistPredictions <- predict(DistModel,testSet)
 cbind(Dist_Pred = DistPredictions,Dist_real = testSet$Dist)
 ```
 
+
+*Exponential Regression Model*
+
+```{r - Create model}
+ExpDistModel<-lm(log(Dist) ~ Speed-1, trainSet) # response(y) ~ terms(X)
+summary(ExpDistModel)
+```
+The multiple R-squared is 0.941 which is pretty close to 1, this models seems to be a good fit.
+
+The p-value is clearly smaller than 0.05 meaning that the relationship between these two variables is statistically significant.
+
+Adjusted R-squared is used to determine how reliable the correlation is and how much it is determined by the addition of independent variables.
+
+```{r - Predictions}
+ExpDistPredictions <- predict(ExpDistModel,testSet)
+cbind(Dist_Pred = exp(ExpDistPredictions),Dist_real = testSet$Dist)
+```
+
+```{r}
+cbind(testSet$Dist)
+```
