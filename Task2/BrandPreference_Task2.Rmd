@@ -10,6 +10,7 @@ This notebook contains the answers to Task 2: Classification: Predict which Bran
 library(readr)
 library(caret)
 library(ggplot2)
+library(dplyr)
 ```
 
 ```{r - Read the dataset from memory}
@@ -17,7 +18,6 @@ train_df<- read.csv("CompleteResponses.csv")#Clients who included their favorite
 test_df<- read.csv("SurveyIncomplete.csv") #Clients that did not favorite computer brand
 train_df
 test_df
-
 ```
 
 These are the two datasets to be used for this task. 
@@ -58,19 +58,21 @@ train_df$car <- as.factor(train_df$car)
 train_df$zipcode <- as.factor(train_df$zipcode)
 train_df$brand <- as.factor(train_df$brand)
 
-
 sapply(train_df, typeof)
 sapply(train_df, typeof) == sapply(test_df, typeof)
 
 ```
-Yes, they have the same data type. All columns are of numerical type so no adjustment needed here. Convert only target column, brand, into factor, to make a binary classifier model, otherwise caret would assume variable is continuous.
+Yes, they have the same data type. All columns are of numerical type so no adjustment needed here. 
+In this project I will predict a nominal value, not a numerical one. Therefore I have to convert the target column (brand) into a factor. Otherwise caret would assume variable is continuous and would not make a binary classifier model.
+
+I will do the same into the categorical features because as far as I investigated, categorical features should be factors, as these are not numerical and continuous, and consequently the final model will be better adjusted to reality and have a better performance.
 
 ```{r - Replicate same conversions to test_df:}
+
 train_df$elevel <- as.factor(train_df$elevel)
 train_df$car <- as.factor(train_df$car)
 train_df$zipcode <- as.factor(train_df$zipcode)
 test_df$brand <- as.factor(test_df$brand)
-
 ```
 
 ```{r - Are there missing values?}
@@ -109,7 +111,10 @@ hist(train_df$credit,xlab="Credit",main="Distribution of credit amount")
 barplot(table(train_df$brand),names.arg = c('Acer','Sony'))
 ```
 
-It might seem that there is a binning problem with the age variable, but after confirming the count of each value, these are the actual counts (with table(test_df$age)) in the dataframe. Age 20 and 80 have more clients than their neighbour ages.
+Looking at the distributions above, all variables seem to be quite uniformly distributed. Nothing to point out in the independent variables.
+
+The biggest exception is the target variable where there are almost twice as many clients with Sony relatively to Acer.
+
 
 ```{r - Histogram plots for test data}
 #Salary
@@ -131,10 +136,7 @@ hist(test_df$credit,xlab="Credit",main="Distribution of credit amount")
 barplot(table(test_df$brand),names.arg = c('Acer','Sony'))
 ```
 
-Once again, it might seem that there is a binning problem with the age variable, but after confirming the count of each value (with table(test_df$age)), these are the actual counts in the dataframe. 
-
-
-Apart from the column "brand", both train and test datasets have quite similar characteristics. This difference is alright because this column is faulty in the test dataset.
+The distribution of variables seem to be quite uniformly distributed. Once again, the target column stands out, because in the test dataset this column is faulty and is filled with 0 by default. Apart from the column "brand", both train and test datasets have quite similar characteristics.
 
 ```{r - Scatter (Box) Plot}
 plot(train_df$salary,train_df$age)
@@ -209,6 +211,8 @@ ggplot(train_df, aes(x=as.factor(brand), y=credit)) +
     xlab("brand")
 ```
 
+The boxplots of each variable seem to be quite similar for any of the brands except in the salary's case, this might be the most revealing feature.
+
 ```{r - Basic boxplots to visualize relationship of testing dataset}
 ggplot(test_df, aes(x=as.factor(brand), y=salary)) + 
     geom_boxplot(fill="slateblue", alpha=0.2) + 
@@ -229,23 +233,28 @@ ggplot(test_df, aes(x=as.factor(brand), y=credit)) +
     geom_boxplot(fill="slateblue", alpha=0.2) + 
     xlab("brand")
 ```
+Both salary and age features have quite different boxplots for each brand, these two features seem to be the most relevant to forecast the brand in the test dataset.
 
+
+In conclusion, it seems that both datasets have quite similar characteristics and the model trained in the train dataset will be useful in forecasting the same feature of the test dataset.
 
 *Creating testing and training sets with caret:*
-```{r}
-OneHot_train_df<- model.matrix(brand ~ ., data=train_df)
-OneHot_train_df
+```{r - Make dummy variable for caret}
+OneHot_train_df <- data.frame(model.matrix( ~ ., data=train_df))
+colnames(OneHot_train_df)[colnames(OneHot_train_df) == 'brand1'] <- 'brand'
+
+OneHot_train_df$brand <- as.factor(OneHot_train_df$brand) #Reconvert brand into binary column not integer.
+
+OneHot_train_df 
 ```
+From what I read caret requires (or at least performs better) with dummy features. Therefore I converted the categorical variables into dummy features but kept the target variable (brand) as it was.
 
 ```{r - Set seed & define training and test datasets}
 set.seed(107)
 
-OneHot_train_df<- head(model.matrix(brand ~ ., data=train_df))
-OneHot_train_df
-
-inTrain <- createDataPartition(y = train_df$brand,
+inTrain <- createDataPartition(y = OneHot_train_df$brand,
             ## the outcome data are needed
-            p = .75,# The percentage of data in the training set
+            p = .75,# The percentage of data in the training set should be 75%
             list = FALSE)
 #The output is a set of integers for the rows of Sonar that belong in the training set.
 
@@ -257,15 +266,16 @@ nrow(testing)
 
 ```
 
-
-*Caret Model*
-
-**Build a model with Stochastic Gradient Boosting GBM, with 10-fold-cross-validation and Automatic tuning Grid**
-```{r - GBM 10 fold cross validation}
-gbmfitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
+```{r - Load missing libraries for the modeling part of this notebook}
+library(gbm)
+library(Rcpp)
 ```
 
 
+**Caret Model 1: Build a model with Stochastic Gradient Boosting GBM to predict nominal data, with 10-fold-cross-validation and Automatic tuning Grid**
+```{r - GBM 10 fold cross validation}
+gbmfitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
+```
 
 ```{r - Train Gradient Boost Classification model}
 # tuneLenght = 1 (trains with 1 mtry value for RandomForest)
@@ -275,20 +285,50 @@ gbmFit1
 ```
 
 
+As asked, in this part we are supposed to train a model using Stochastic Gradient Boosting, GBM, on the training set with 10-fold cross-validation and an Automatic Tuning Grid, which is what is coded above.
+
+Train function chooses the model with the largest performance value (or smallest, for mean squared error in regression models), therefore there is no need to select the best iteration of the models.
+
 ```{r -  Ascertain how the model prioritized each feature in the GBM training}
-library(gbm)
 varImp(gbmFit1)
 ```
-```{r- Make predictions based on previously trained model}
-predict()
+
+As predicted the salary variable is the most relevant in predicting the target variable. Age comes in a close second place. The remaining variables have a really low relative impact when forecasting the target.
+
+```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
+pred_GBM <- predict(gbmFit1, newdata = testing)
+
+Prob_pred_GBM <- predict(gbmFit1, newdata = testing, type = "prob")
+
+postResample(pred_GBM, testing$brand)
+
+
 ```
 
-```{r - Post resample for whatever}
-postResample()?
+This model provides an accuracy of 93% which is pretty high.
+This dataset does not have an imbalanced target, therefore the Kappa value is not too different from the accuracy value.  
+The Kappa or Cohen's Kappa is at 85% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
+
+(Practically, Cohen’s kappa removes the possibility of the classifier and a random guess agreeing and measures the number of predictions it makes that cannot be explained by a random guess. Furthermore, Cohen’s kappa tries to correct the evaluation bias by taking into account the correct classification by a random guess.)
+
+```{r - Further metrics with confusion matrix}
+confusionMatrix(data = pred_GBM, 
+                reference = testing$brand, 
+                positive = "1")
 ```
 
 
-**Use Random Forest with 10-fold cross-validation and manually tune 5 different mtry values**
+```{r - Calculate two class summary for binary GBM model}
+temp_pred_GB = factor(ifelse(pred_GBM == 1, "Y", "N"))
+temp_obs_GB = factor(ifelse(testing$brand == 1, "Y", "N"))
+
+twoClassSummary(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
+#For some reason, this function does not seem to provide ROC results if a binary numerical labeling is used, I had to convert '1' into 'Y' and '0' into 'N' to obtain valid results
+
+mnLogLoss(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
+```
+
+**Caret Model 2: Use Random Forest with 10-fold cross-validation to predict nominal data and manually tune 5 different mtry values**
 
 mtry is the number of variables randomly sampled as candidates at each split. Note that the default values are different for classification (sqrt(p) where p is number of variables in x) and regression (p/3)
 
@@ -312,4 +352,42 @@ rfFit1
 
 ```{r -  Ascertain how the model prioritized each feature in the RF training}
 varImp(rfFit1)
+```
+
+
+
+```{r - Make predictions based on RF trained model and calculate basic metrics (wuth PostResample)}
+pred_RF <- predict(rfFit1, newdata = testing)
+
+Prob_pred_RF <- predict(rfFit1, newdata = testing, type = "prob")
+
+postResample(pred_RF, testing$brand)
+
+```
+
+```{r - Further metrics of RF with confusion matrix}
+confusionMatrix(data = pred_RF, 
+                reference = testing$brand, 
+                positive = "1")
+```
+
+
+```{r - Calculate two class summary for binary RF model}
+temp_pred_RF = factor(ifelse(pred_RF == 1, "Y", "N"))
+temp_obs_RF = factor(ifelse(testing$brand == 1, "Y", "N"))
+
+twoClassSummary(data = data.frame(obs = temp_obs_RF, pred = temp_pred_RF, Y = Prob_pred_RF$'1', N = Prob_pred_RF$'0'), lev = levels(temp_pred_RF))
+#For some reason, this function does not seem to provide ROC results if a binary numerical labeling is used, I had to convert '1' into 'Y' and '0' into 'N' to obtain valid results
+
+
+mnLogLoss(data = data.frame(obs = temp_obs_RF, pred = temp_pred_RF, Y = Prob_pred_RF$'1', N = Prob_pred_RF$'0'), lev = levels(temp_pred_RF))
+```
+
+*Compare the results from two models:*
+```{r - Compare results}
+results <- resamples(list(GBMAut=gbmFit1, RFMan=rfFit1))
+
+summary(results)
+
+bwplot(results)
 ```
