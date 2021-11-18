@@ -420,7 +420,7 @@ twoClassSummary(data = data.frame(obs = temp_obs_RF, pred = temp_pred_RF, Y = Pr
 
 mnLogLoss(data = data.frame(obs = temp_obs_RF, pred = temp_pred_RF, Y = Prob_pred_RF$'1', N = Prob_pred_RF$'0'), lev = levels(temp_pred_RF))
 ```
-***Comment on ROC and LogLoss***
+***Comment on ROC and LogLoss, confirm if this specificity (and sensitivity) agrees with the one above!!!!!!!!!!!!!!!!!!!!!!!!***
 
 
 *Compare the results from two models:*
