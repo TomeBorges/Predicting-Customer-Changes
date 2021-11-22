@@ -69,10 +69,13 @@ I will do the same into the categorical features because as far as I investigate
 
 ```{r - Replicate same conversions to test_df:}
 
-train_df$elevel <- as.factor(train_df$elevel)
-train_df$car <- as.factor(train_df$car)
-train_df$zipcode <- as.factor(train_df$zipcode)
+test_df$elevel <- as.factor(test_df$elevel)
+test_df$car <- as.factor(test_df$car)
+test_df$zipcode <- as.factor(test_df$zipcode)
 test_df$brand <- as.factor(test_df$brand)
+
+sapply(test_df, typeof)
+sapply(test_df, typeof) == sapply(test_df, typeof)
 ```
 
 ```{r - Are there missing values?}
@@ -345,12 +348,14 @@ The confusion matrix is quite solid, the auxiliary statistical metrics derived, 
 temp_pred_GB = factor(ifelse(pred_GBM == 1, "Y", "N"))
 temp_obs_GB = factor(ifelse(testing$brand == 1, "Y", "N"))
 
-twoClassSummary(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'0', N = Prob_pred_GBM$'1'), lev = levels(temp_pred_GB))
+twoClassSummary(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
 #For some reason, this function does not seem to provide ROC results if a binary numerical labeling is used, I had to convert '1' into 'Y' and '0' into 'N' to obtain valid results
 
-mnLogLoss(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'0', N = Prob_pred_GBM$'1'), lev = levels(temp_pred_GB))
+mnLogLoss(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
 ```
-The area under the ROC curve is close to 1 meaning that the classifier is far better than a random classifier (AUC of 0.5). In fact, the AUC is close to 1, a perfect classifier. The value of the sensitivity is 0.917 and the value of specificity is 0.9512.
+The area under the ROC curve is close to 1 meaning that the classifier is far better than a random classifier (AUC of 0.5). In fact, the AUC is close to 1, a perfect classifier. The value of the specificity and specificity seem to have swapped among themselves (the values calculated in the function above are the correct ones), thus, I will not comment these values.
+- _Log Loss_: Log-loss is indicative of how close the prediction probability is to the corresponding actual/true value (0 or 1 in case of binary classification). The more the predicted probability diverges from the actual value, the higher is the log-loss value. In the case of the LogLoss metric, one usual "well-known" metric is to say that 0.693 is the non-informative value. This figure is obtained by predicting p = 0.5 for any class of a binary problem. This is valid only for balanced binary problems. 
+Because we have obtained a Log Loss of 0.218, much lower than 0.693, we can afirm that this model is clearly better than random picking and has captured the problem.
 
 **Caret Model 2: Use Random Forest with 10-fold cross-validation to predict nominal data and manually tune 5 different mtry values**
 
@@ -420,8 +425,10 @@ twoClassSummary(data = data.frame(obs = temp_obs_RF, pred = temp_pred_RF, Y = Pr
 
 mnLogLoss(data = data.frame(obs = temp_obs_RF, pred = temp_pred_RF, Y = Prob_pred_RF$'1', N = Prob_pred_RF$'0'), lev = levels(temp_pred_RF))
 ```
-***Comment on ROC and LogLoss, confirm if this specificity (and sensitivity) agrees with the one above!!!!!!!!!!!!!!!!!!!!!!!!***
 
+The area under the ROC curve is close to 1 meaning that the classifier is far better than a random classifier (AUC of 0.5). In fact, the AUC is close to 1, a perfect classifier. The value of the specificity and specificity seem to have swapped among themselves (the values calculated in the function above are the correct ones), thus, I will not comment these values.
+- _Log Loss_: Log-loss is indicative of how close the prediction probability is to the corresponding actual/true value (0 or 1 in case of binary classification). The more the predicted probability diverges from the actual value, the higher is the log-loss value. In the case of the LogLoss metric, one usual "well-known" metric is to say that 0.693 is the non-informative value. This figure is obtained by predicting p = 0.5 for any class of a binary problem. This is valid only for balanced binary problems. 
+Because we have obtained a Log Loss of 0.218, much lower than 0.693, we can afirm that this model is clearly better than random picking and has captured the problem.
 
 *Compare the results from two models:*
 ```{r - Compare results}
@@ -436,7 +443,37 @@ Looking at the table and boxplot of the chunk above it seems that both algorithm
 
 *Forecast testing dataset with the best performing model (GBM)*
 
-```{r}
+
+```{r - Make dummy variable for caret}
+OneHot_test_df <- data.frame(model.matrix( ~ ., data=test_df))
+OneHot_test_df <- subset(OneHot_test_df, select=-c(brand1)) # Remove target column
+```
+
+
+```{r - Calculate the prediction with the best model trained above:}
+prediction<-predict(rfFit1,OneHot_test_df)
+```
+```{r - Post resampling for accuracy and Kappa of model in test dataset:}
+
+postResample(prediction, test_df$brand)
 
 ```
+
+Not surprisingly the Accuracy and Kappa are absolutely awful. As mentioned before, the values for the target column of the test dataset seem to have been filled arbitrarily and should not be payed any attention. Therefore, we cannot measure the actual accuracy or any other metric in the test dataset, as there is no true column to compare the forecast against. We must believe that the population from the test dataset behaves similarly to the train dataset and that both datasets have been picked randomly (otherwise the population could have suffer sample selection bias)
+
+```{r - Summary of prediction:}
+summary(prediction)
+```
+
+```{r - Preferred computer brand comparison in the train, test and both datasets:}
+#Computer Brand
+barplot(table(train_df$brand),names.arg = c('Acer','Sony'))
+
+barplot(table(prediction),names.arg = c('Acer','Sony'))
+
+TotalTarget <- data.frame(TestTrain = c(train_df$brand, prediction))
+barplot(table(TotalTarget),names.arg = c('Acer','Sony'))
+
+```
+
 
