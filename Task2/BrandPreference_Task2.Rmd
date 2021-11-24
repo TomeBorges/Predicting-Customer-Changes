@@ -502,3 +502,6 @@ test_df$prediction <- prediction
 test_df
 write_tsv(test_df,"SurveyIncomplete_WithPreds.tab")
 ```
+
+
+In conclusion, Blackwell's customers typically prefer Sony as their computer brand comparatively to Acer, and this can be forecast with a high accuracy.
