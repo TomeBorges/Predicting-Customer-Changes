@@ -22,7 +22,7 @@ test_df
 ```
 
 These are the two datasets to be used for this task. 
-It's worth noting that the column "volume" in the test_df has been filled with zeroes (as default). Therefore this column is useless as it is and should not be considered.
+It's worth noting that the column "volume" in the test_df has been filled with zeroes (as default). Therefore this column is meaningless as it is and should not be used directly.
 
 *Understand the data:*
 
@@ -56,16 +56,13 @@ sapply(train_df, typeof)
 sapply(train_df, typeof) == sapply(test_df, typeof)
 
 ```
-
-
-The column types coincide, but the variable ProductType is of character type. Therefore, I shall dummify this column into a binary One hot encoding with caret. Otherwise, all columns are of numerical type so no further adjustments needed here. 
-
+The column types coincide, but the variable ProductType is of character type. Therefore, I shall dummify this column into a binary One hot encoding with caret. The remaining columns are of numerical type so no further adjustments needed here. 
 
 ```{r - Dummify the data:}
 
 #Convert categorical columns into factors to indicate that these columns contain a limited number of unique values.
 length(table(train_df$ProductType))
-#We have 12 possibilities of ProductType. Since we previously had 18 columns in total, after dummifying the data both datasets will contain (18-1+12=) 29 columns.
+
 
 # Rewrite the train_df with the dummy variables:
 newDataFrame <- dummyVars(" ~ .", data = train_df)
@@ -73,7 +70,8 @@ train_df <- data.frame(predict(newDataFrame, newdata = train_df))
 train_df
 
 ```
-
+The column ProductType has 12 possible values.
+As we previously had 18 columns in total, after dummifying the data both datasets will contain (18-1(removal of original column)+12=) 29 columns, which is what we have.
 
 ```{r - Replicate same conversions to test_df:}
 
@@ -82,6 +80,7 @@ newDataFrame <- dummyVars(" ~ .", data = test_df)
 test_df <- data.frame(predict(newDataFrame, newdata = test_df))
 test_df
 ```
+The same 29 columns are verified here.
 
 ```{r - Are there missing values?}
 any(is.na(train_df))
@@ -94,7 +93,7 @@ The train_df has null values. Investigate:
 names(which(colSums(is.na(train_df)) > 0))
 train_df$BestSellersRank
 ```
-As can be seen abovem the column BestSellersRank in the train_df has got quite a few Null values. According to the plan of attack I should just ignore the variables with nulls. (Otherwise, I would address these nulls by replacing them with whatever one should do when correcting ranking variables. Quite possibly use the median as replacement value. This way, the replaced nulls would be pretty neutral when looking at this variable as a whole).
+As can be seen above the column BestSellersRank in the train_df has got quite a few Null values. According to the plan of attack I should just ignore the variables with nulls. (Otherwise, I would address these nulls by replacing them with whatever one should do when correcting ranking variables. Out of the top of my head, I would quite possibly use the median as replacement value. This way, the replaced nulls would be pretty neutral when looking at this variable as a whole)
 
 
 ```{r - Address missing values of both datasets by simply eliminating the column:}
@@ -138,163 +137,102 @@ corrplot(corrData_train, method ='number')
 dev.off() #Avoid overwritting png image above
 ```
 
-
 ```{r - Correlation plot for the test dataset:}
 png(file="corr_test.png", res=300, width=4500, height=4500)
 corrplot(corrData_test, method ='number')
 dev.off()#Avoid overwritting png image above
 ```
-
 The correlations from both datasets are quite similar. The biggest difference is that the Volume has no correlation in the test dataframe because this column is invariable (looking at the formula there is a division by zero in this case resulting in an undefined number).
-The Star Reviews variables are significantly positively correlated among each other. The variables associated with product dimensions are also notably positively correlated.
+
+All x'N'StarReviews variables are significantly positively correlated among each other. Interestingly, the further the classification the lower the correlation is. This fact makes sense because these variables are a simple count. I would argue that the high correlation among these features can be owed to their common nature, a causation relation seems to be unlikely among these variables.
+The variables associated with product dimensions are also notably positively correlated. Once again because of the nature of these features, it makes sense that these are quite correlated. Packaging dimension and weight follow certain rules.
+
 Other than these, there are a few relevant individual situations mostly of positive correlations such as the case of ProductType Laptop with Price or ProductType Printer with Profit Margin in the testing dataset and Volume with the star reviews (particularly with 5 star review which has a correlation of 1!) or Extended Warranty with Profit margin.
-```{r}
-train_df
-```
 
-
-```{r - Histogram plots for train data}
-#Salary
-hist(train_df$Price,xlab="Salary",main="Distribution of salary amount")
-#Age
-hist(train_df$age,xlab="Age",main="Distribution of ages")
-#Education
-x<-barplot(table(train_df$elevel), xaxt="n")
-text(cex=1, x=x-.25, y=-300, c('Less than HS', 'HS','Some College','4-y college','Mst/Doc/ProfD'), xpd=TRUE, srt=45)
-#Car
-x<-barplot(table(train_df$car), xaxt="n")
-text(cex=1, x=x-.25, y=-100, c('BMW','Buick','Cadillac','Chevrolet','Chrysler','Dodge','Ford','Honda','Hyundai','Jeep','Kia','Lincoln','Mazda','Mercedes','Mitsubishi','Nissan','Ram','Subaru','Toyota','Other'), xpd=TRUE, srt=90)
-#Zip Code
-x<-barplot(table(train_df$zipcode), xaxt="n")
-text(cex=1, x=x-.25, y=-200, c('New England','Mid-Atlantic','E-N-Central','W-N-Central','S-Atlantic','E-S-Central','W-S-Central','Mountain','Pacific'), xpd=TRUE, srt=60)
-#Credit
-hist(train_df$credit,xlab="Credit",main="Distribution of credit amount")
-#Computer Brand
-barplot(table(train_df$brand),names.arg = c('Acer','Sony'))
-```
-
-Looking at the distributions above, all variables seem to be quite uniformly distributed. Nothing to point out in the independent variables.
-
-The biggest exception is the target variable where there are almost twice as many clients with Sony relatively to Acer. The target variable is quite imbalanced.
-
-
-```{r - Histogram plots for test data}
-#Salary
-hist(test_df$salary,xlab="Salary",main="Distribution of salary amount")
-#Age
-hist(test_df$age,xlab="Age",main="Distribution of ages")
-#Education
-x<-barplot(table(test_df$elevel), xaxt="n")
-text(cex=1, x=x-.25, y=-150, c('Less than HS', 'HS','Some College','4-y college','Mst/Doc/ProfD'), xpd=TRUE, srt=45)
-#Car
-x<-barplot(table(test_df$car), xaxt="n")
-text(cex=1, x=x-.25, y=-40, c('BMW','Buick','Cadillac','Chevrolet','Chrysler','Dodge','Ford','Honda','Hyundai','Jeep','Kia','Lincoln','Mazda','Mercedes','Mitsubishi','Nissan','Ram','Subaru','Toyota','Other'), xpd=TRUE, srt=90)
-#Zip Code
-x<-barplot(table(test_df$zipcode), xaxt="n")
-text(cex=1, x=x-.25, y=-100, c('New England','Mid-Atlantic','E-N-Central','W-N-Central','S-Atlantic','E-S-Central','W-S-Central','Mountain','Pacific'), xpd=TRUE, srt=60)
-#Credit
-hist(test_df$credit,xlab="Credit",main="Distribution of credit amount")
-#Computer Brand
-barplot(table(test_df$brand),names.arg = c('Acer','Sony'))
-```
-
-The distribution of variables seem to be quite uniformly distributed. Once again, the target column stands out, because in the test dataset this column is faulty and is filled with 0 by default. Apart from the column "brand", both train and test datasets have quite similar characteristics.
-
-
-```{r - Normal Quantile Plot for training dataset}
-qqnorm(train_df$salary)
-qqnorm(train_df$age)
-qqnorm(as.integer(train_df$elevel))
-qqnorm(as.integer(train_df$car))
-qqnorm(as.integer(train_df$zipcode))
-qqnorm(train_df$credit)
-qqnorm(as.integer(train_df$brand))
-```
-
-```{r - Normal Quantile Plot for testing dataset}
-qqnorm(test_df$salary)
-qqnorm(test_df$age)
-qqnorm(as.integer(test_df$elevel))
-qqnorm(as.integer(test_df$car))
-qqnorm(as.integer(test_df$zipcode))
-qqnorm(test_df$credit)
-qqnorm(as.integer(test_df$brand))
-```
-
-
-```{r - Basic boxplots to visualize relationship of training dataset}
-ggplot(train_df, aes(x=as.factor(brand), y=salary)) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(train_df, aes(x=as.factor(brand), y=age)) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(train_df, aes(x=as.factor(brand), y=as.integer(elevel))) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(train_df, aes(x=as.factor(brand), y=as.integer(car))) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(train_df, aes(x=as.factor(brand), y=as.integer(zipcode))) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(train_df, aes(x=as.factor(brand), y=credit)) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-```
-
-The boxplots of each variable seem to be quite similar for any of the brands except in the salary's case, this might be the most revealing feature.
-
-```{r - Basic boxplots to visualize relationship of testing dataset}
-ggplot(test_df, aes(x=as.factor(brand), y=salary)) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(test_df, aes(x=as.factor(brand), y=age)) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(test_df, aes(x=as.factor(brand), y=as.integer(elevel))) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(test_df, aes(x=as.factor(brand), y=as.integer(car))) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(test_df, aes(x=as.factor(brand), y=as.integer(zipcode))) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-ggplot(test_df, aes(x=as.factor(brand), y=credit)) + 
-    geom_boxplot(fill="slateblue", alpha=0.2) + 
-    xlab("brand")
-```
-Both salary and age features have quite different boxplots for each brand, these two features seem to be the most relevant to forecast the brand in the test dataset.
-
-
-In conclusion, it seems that both datasets have quite similar characteristics and the model trained in the train dataset will be useful in forecasting the same feature of the test dataset.
+Finally, looking exclusively to the correlations of the volume in the train dataset, it is visible that the products with any StarReview or PositiveServiceReview have a much higher volume (Review associated features are possibily be the most relevant features towards predicting the volume of sales). Another interesting outtake from this correlation matrix is that Game Consoles have a much correlation with volume than any other prduct type, meaning that these have higher volumes.
+Variables such as Profit Margin or any of the product dimensions have a correlation closer to zero with Volume. These variables may not be relevant towards predicting this target.
 
 *Creating testing and training sets with caret:*
-```{r - Make dummy variable for caret}
-OneHot_train_df <- data.frame(model.matrix( ~ ., data=train_df))
-colnames(OneHot_train_df)[colnames(OneHot_train_df) == 'brand1'] <- 'brand'
+```{r}
 
-OneHot_train_df$brand <- as.factor(OneHot_train_df$brand) #Reconvert brand into binary column not integer.
-
-OneHot_train_df 
-```
-From what I read caret requires (or at least performs better) with dummy features. Therefore I converted the categorical variables into dummy features but kept the target variable (brand) as it was.
-
-```{r - Set seed & define training and test datasets}
-set.seed(107)
-
-inTrain <- createDataPartition(y = OneHot_train_df$brand,
+inTrain <- createDataPartition(y = train_df$Volume,
             ## the outcome data are needed
             p = .75,# The percentage of data in the training set should be 75%
             list = FALSE)
 #The output is a set of integers for the rows of Sonar that belong in the training set.
 
-training <- OneHot_train_df[ inTrain,] #TrainSet will contain the selected indices.
-testing <- OneHot_train_df[-inTrain,] #TestSet will contain only the remaining rows that have not been selected.
+training <- train_df[ inTrain,] #TrainSet will contain the selected indices.
+testing <- train_df[-inTrain,] #TestSet will contain only the remaining rows that have not been selected.
 
 nrow(training)
 nrow(testing)
+
+```
+
+**Caret Model 1: Create a linear model that uses volume as its dependent variable:**
+
+```{r}
+#Write trainSet in the data parameter instead of on each variable just to improve readability
+LinearModel<- lm(Volume ~ PositiveServiceReview, training) #The analysis goal is to predict the Volume of a product using the most informative singular feature (which appears to be PositveServiceReview).
+summary(LinearModel)
+
+predictions <- LinearModel %>% predict(testing)
+
+RMSE(predictions, testing$Volume)
+R2(predictions, testing$Volume)
+```
+Using only 1 variable and a linear regression the best results I obtained in forecasting the Volume was with the PositiveServiceReview feature. The RMSE is 558 and the R-squared is 0.37, which are two extremely high values revealing that this model is not effective and is not robust or accurate enough to be utilized with confidence.
+
+Linear models, generalized linear models, and nonlinear models are examples of parametric regression models because we know the function that describes the relationship between the response and explanatory variables.
+This dataset is small and the data does not seem to follow the distributional requirements of parametric methods as can be seen below, the data is highly skewed and many features are categorical, not numerical:
+
+```{r - Histogram of all variables in the dataset}
+hist(train_df$ProductTypeAccessories)
+hist(train_df$ProductTypeDisplay)
+hist(train_df$ProductTypeExtendedWarranty)
+hist(train_df$ProductTypeGameConsole)
+hist(train_df$ProductTypeLaptop)
+hist(train_df$ProductTypeNetbook)
+hist(train_df$ProductTypePC)
+hist(train_df$ProductTypePrinter)
+hist(train_df$ProductTypePrinterSupplies)
+hist(train_df$ProductTypeSmartphone)
+hist(train_df$ProductTypeSoftware)
+hist(train_df$ProductTypeTablet)
+hist(train_df$ProductNum)
+hist(train_df$Price)
+hist(train_df$x5StarReviews)
+hist(train_df$x4StarReviews)
+hist(train_df$x3StarReviews)
+hist(train_df$x2StarReviews)
+hist(train_df$x1StarReviews)
+hist(train_df$PositiveServiceReview)
+hist(train_df$NegativeServiceReview)
+hist(train_df$Recommendproduct)
+hist(train_df$ShippingWeight)
+hist(train_df$ProductDepth)
+hist(train_df$ProductWidth)
+hist(train_df$ProductHeight)
+hist(train_df$ProfitMargin)
+hist(train_df$Volume)
+```
+
+Note: Below I created a multiple linear regression (which is not what the PoA asked for, therefore I will not go into much detail other than a brief comment.
+
+```{r}
+#Write trainSet in the data parameter instead of on each variable just to improve readability
+MLRModel<- lm(Volume ~ ., training) #Creation of a Multiple Linear Regression taking into account all variables (except obviously for the dependent one) as features to forecast the Volume;
+summary(MLRModel)
+```
+
+The multiple linear regression obtained incredible results which is doubtful. Something could be wrong above. If all is correct then the dependent variable is extremely predictable looking into the independent ones. I will confirm this in the following models.
+
+
+*Let's dive into some non-parametric machine learning models now:*
+```{r - Set seed & define training and test datasets}
+set.seed(107)
+
+#Train and test data sets have been previously created.
 
 ```
 
@@ -304,7 +242,14 @@ library(Rcpp)
 ```
 
 
-**Caret Model 1: Build a model with Stochastic Gradient Boosting GBM to predict nominal data, with 10-fold-cross-validation and Automatic tuning Grid**
+
+**Caret Model 2: Support Vector Machine (SVM)**
+
+**Caret Model 3: Random Forest (RF)**
+
+**Caret Model 4: Gradient Boosting (GB)**
+
+
 ```{r - GBM 10 fold cross validation}
 gbmfitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
 ```
@@ -458,6 +403,9 @@ mnLogLoss(data = data.frame(obs = temp_obs_RF, pred = temp_pred_RF, Y = Prob_pre
 The area under the ROC curve is close to 1 meaning that the classifier is far better than a random classifier (AUC of 0.5). In fact, the AUC is close to 1, a perfect classifier. The value of the specificity and specificity seem to have swapped among themselves (the values calculated in the function above are the correct ones), thus, I will not comment these values.
 - _Log Loss_: Log-loss is indicative of how close the prediction probability is to the corresponding actual/true value (0 or 1 in case of binary classification). The more the predicted probability diverges from the actual value, the higher is the log-loss value. In the case of the LogLoss metric, one usual "well-known" metric is to say that 0.693 is the non-informative value. This figure is obtained by predicting p = 0.5 for any class of a binary problem. This is valid only for balanced binary problems. 
 Because we have obtained a Log Loss of 0.218, much lower than 0.693, we can afirm that this model is clearly better than random picking and has captured the problem.
+
+
+
 
 *Compare the results from two models:*
 ```{r - Compare results}
