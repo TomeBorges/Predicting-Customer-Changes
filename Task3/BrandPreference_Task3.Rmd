@@ -183,7 +183,7 @@ RMSE(predictions, testing$Volume)
 R2(predictions, testing$Volume)
 MAE(predictions, testing$Volume)
 ```
-Using only 1 variable and a linear regression the best results I obtained in forecasting the Volume was with the PositiveServiceReview feature. The RMSE is 672 and the R-squared is 0.38, which are two extremely high values revealing that this model is not effective and is not robust or accurate enough to be utilized with confidence.
+Using only 1 variable and a linear regression the best results I obtained in forecasting the Volume was with the PositiveServiceReview feature. The RMSE is 688 and the R-squared is 0.33, which are two extremely high values revealing that this model is not effective and is not robust or accurate enough to be utilized with confidence.
 
 Linear models, generalized linear models, and nonlinear models are examples of parametric regression models because we know the function that describes the relationship between the response and explanatory variables.
 This dataset is small and the data does not seem to follow the distributional requirements of parametric methods as can be seen below, the data is highly skewed and many features are categorical, not numerical:
@@ -266,6 +266,7 @@ Train function chooses the model with the largest performance value (or smallest
 
 ```{r -  Ascertain how the model prioritized each feature in the SVM training}
 varImp(svmFit1)
+plot(varImp(object=svmFit1),   main="SVM - Variable Importance")
 ```
 
 As was predicted in the correlation section, the Review variables are the most relevant towards forecasting this target.
@@ -279,8 +280,8 @@ postResample(pred_SVM, testing$Volume)
 ```
 
 For the testing portion of the train_df: 
-The value of the Root Mean Squared Error is ~198, taking into account that the average Volume is 700, this error is not terrible, but it is not great as well. The same goes for a Mean Absolute Error of ~152.
-The rsquared is ~0.88 which means that this models is an alright fit for this task.
+The value of the Root Mean Squared Error is ~156, taking into account that the average Volume is 700, this error is not terrible, but it is not great as well. The same goes for a Mean Absolute Error of ~127.
+The rsquared is ~0.93 which means that this models is an alright fit for this task.
 
 **Caret Model 3: Random Forest (RF)**
 ```{r - RF 10 fold cross validation}
@@ -310,6 +311,7 @@ rfFit1
 
 ```{r -  Ascertain how the model prioritized each feature in the RF training}
 varImp(rfFit1)
+plot(varImp(object=rfFit1),   main="RF - Variable Importance")
 ```
 
 Similarly to the previous model, the most relevant features are by far the ones associated with reviews (as predicted).
@@ -323,8 +325,8 @@ postResample(pred_RF, testing$Volume)
 ```
 
 For the testing portion of the train_df: 
-The value of the Root Mean Squared Error is ~528, taking into account that the average Volume is 700, this error is not terrible, but it is not great as well. The same goes for a Mean Absolute Error of ~165
-The rsquared is ~0.79 which means that this models is a better fit for this task than the SVM.
+The value of the Root Mean Squared Error is ~52, taking into account that the average Volume is 700, this error is not terrible, but it is not great as well. The same goes for a Mean Absolute Error of ~0.99
+The rsquared is ~30.24 which means that this models is a better fit for this task than the SVM.
 
 
 **Caret Model 4: Gradient Boosting (GB)**
@@ -358,6 +360,7 @@ Train function chooses the model with the largest performance value (or smallest
 
 ```{r -  Ascertain how the model prioritized each feature in the GBM training}
 varImp(gbmFit1)
+plot(varImp(object=gbmFit1),   main="GBM - Variable Importance")
 ```
 
 As predicted the salary variable is the most relevant in predicting the target variable. Age comes in a close second place. The remaining variables have a really low relative impact when forecasting the target.
@@ -436,4 +439,78 @@ write.csv(output, file="C2.T3output.csv", row.names = TRUE)
 
 
 
-In conclusion, Blackwell's customers typically prefer Sony as their computer brand comparatively to Acer, and this can be forecast with a high accuracy.
+
+```{r}
+library(babynames)
+data <- babynames %>% 
+  filter(name %in% c("Mary","Emma", "Ida", "Ashley", "Amanda", "Jessica", "Patricia", "Linda", "Deborah","Dorothy", "Betty", "Helen")) %>%
+  filter(sex=="F")
+```
+
+```{r}
+plot_train_df<- read.csv("existingproductattributes2017.csv")#Clients who included their favorite computer brand in the questionaire answers
+plot_test_df<- read.csv("newproductattributes2017.csv") #Clients that did not favorite computer brand
+```
+
+```{r}
+
+plot_train_df %>% 
+  filter(ProductType %in% c("PC", "Laptop", "Netbook","Smartphone")) %>%
+  group_by(ProductType) %>%
+  summarize(Volume = sum(Volume), x5star)
+
+dcast(plot_train_df, ProductType ~ x5StarReviews, value.var = "Volume", fun.aggregate=sum)
+```
+
+```{r}
+plot_train_df
+
+asd <- plot_train_df %>%
+  group_by(ProductType) %>%
+  summarize(VolumeTotal= sum(Volume), 
+            x5Star = sum(x5StarReviews),
+            x4Star = sum(x4StarReviews),
+            x3Star = sum(x3StarReviews),
+            x2Star = sum(x2StarReviews),
+            x1Star = sum(x1StarReviews),
+            PositiveServiceReview = sum(PositiveServiceReview),
+            NegativeServiceReview = sum(NegativeServiceReview)
+            ) %>%
+  filter( ProductType %in% c("PC", "Laptop", "Netbook","Smartphone"))
+melt(asd)
+
+asd<- dcast(melt(asd), variable ~ProductType , value.var = "value", fun.aggregarte='sum')
+asd
+```
+
+
+```{r}
+
+ggplot(plot_train_df, aes(Volume)) + 
+  geom_line(aes(y = x5StarReviews, colour = "x5StarReviews")) + 
+  geom_line(aes(y = x4StarReviews, colour = "x4StarReviews")) + 
+  geom_line(aes(y = x3StarReviews, colour = "x3StarReviews")) + 
+  geom_line(aes(y = x2StarReviews, colour = "x2StarReviews")) + 
+  geom_line(aes(y = x1StarReviews, colour = "x1StarReviews")) + 
+  geom_line(aes(y = PositiveServiceReview, colour = "PositiveServiceReview")) + 
+  geom_line(aes(y = NegativeServiceReview, colour = "NegativeServiceReview")) +
+  labs(title = "Relation between review quantity and Volume in train dataset",  y = "Quantity", x = 'Volume')
+
+```
+
+```{r}
+
+plot_test_df$predictions <- prediction
+
+
+ggplot(plot_test_df, aes(prediction)) + 
+  geom_line(aes(y = x5StarReviews, colour = "x5StarReviews")) + 
+  geom_line(aes(y = x4StarReviews, colour = "x4StarReviews")) + 
+  geom_line(aes(y = x3StarReviews, colour = "x3StarReviews")) + 
+  geom_line(aes(y = x2StarReviews, colour = "x2StarReviews")) + 
+  geom_line(aes(y = x1StarReviews, colour = "x1StarReviews")) + 
+  geom_line(aes(y = PositiveServiceReview, colour = "PositiveServiceReview")) + 
+  geom_line(aes(y = NegativeServiceReview, colour = "NegativeServiceReview")) +
+  labs(title = "Relation between review quantity and Volume in test dataset",  y = "Quantity", x = 'Volume')
+```
+
