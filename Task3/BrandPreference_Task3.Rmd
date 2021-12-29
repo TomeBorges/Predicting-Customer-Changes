@@ -153,7 +153,8 @@ Finally, looking exclusively to the correlations of the volume in the train data
 Variables such as Profit Margin or any of the product dimensions have a correlation closer to zero with Volume. These variables may not be relevant towards predicting this target.
 
 *Creating testing and training sets with caret:*
-```{r}
+```{r - Set seed & define training and test datasets}
+set.seed(107)
 
 inTrain <- createDataPartition(y = train_df$Volume,
             ## the outcome data are needed
@@ -171,7 +172,7 @@ nrow(testing)
 
 **Caret Model 1: Create a linear model that uses volume as its dependent variable:**
 
-```{r}
+```{r - Training a Linear model}
 #Write trainSet in the data parameter instead of on each variable just to improve readability
 LinearModel<- lm(Volume ~ PositiveServiceReview, training) #The analysis goal is to predict the Volume of a product using the most informative singular feature (which appears to be PositveServiceReview).
 summary(LinearModel)
@@ -180,8 +181,9 @@ predictions <- LinearModel %>% predict(testing)
 
 RMSE(predictions, testing$Volume)
 R2(predictions, testing$Volume)
+MAE(predictions, testing$Volume)
 ```
-Using only 1 variable and a linear regression the best results I obtained in forecasting the Volume was with the PositiveServiceReview feature. The RMSE is 984 and the R-squared is 0.33, which are two extremely high values revealing that this model is not effective and is not robust or accurate enough to be utilized with confidence.
+Using only 1 variable and a linear regression the best results I obtained in forecasting the Volume was with the PositiveServiceReview feature. The RMSE is 672 and the R-squared is 0.38, which are two extremely high values revealing that this model is not effective and is not robust or accurate enough to be utilized with confidence.
 
 Linear models, generalized linear models, and nonlinear models are examples of parametric regression models because we know the function that describes the relationship between the response and explanatory variables.
 This dataset is small and the data does not seem to follow the distributional requirements of parametric methods as can be seen below, the data is highly skewed and many features are categorical, not numerical:
@@ -233,14 +235,6 @@ The multiple linear regression obtained incredible results which is doubtful. So
 
 *Let's dive into some non-parametric machine learning models now:*
 
-```{r - Set seed & define training and test datasets}
-set.seed(107)
-
-#Train and test data sets have been previously created.
-
-```
-
-
 **Caret Model 2: Support Vector Machine (SVM)**
 ```{r - SVM 10 fold cross validation}
 svmfitControl <- trainControl(method = "repeatedcv", 
@@ -274,6 +268,8 @@ Train function chooses the model with the largest performance value (or smallest
 varImp(svmFit1)
 ```
 
+As was predicted in the correlation section, the Review variables are the most relevant towards forecasting this target.
+
 ```{r - Make predictions based on SVM trained model and calculate basic metrics (with PostResample)}
 pred_SVM <- predict(svmFit1, newdata = testing)
 
@@ -283,8 +279,8 @@ postResample(pred_SVM, testing$Volume)
 ```
 
 For the testing portion of the train_df: 
-The value of the Root Mean Squared Error is ~362, taking into account that the average Volume is 700, this error is not terrible, but it is not great as well. The same goes for a Mean Absolute Error of ~264.
-The rsquared is ~0.77 which means that this models is an alright fit for this task.
+The value of the Root Mean Squared Error is ~198, taking into account that the average Volume is 700, this error is not terrible, but it is not great as well. The same goes for a Mean Absolute Error of ~152.
+The rsquared is ~0.88 which means that this models is an alright fit for this task.
 
 **Caret Model 3: Random Forest (RF)**
 ```{r - RF 10 fold cross validation}
