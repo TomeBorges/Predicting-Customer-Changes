@@ -12,6 +12,9 @@ library(caret)
 library(ggplot2)
 library(dplyr)
 library(corrplot)
+
+library(gbm)
+library(Rcpp)
 ```
 
 ```{r - Read the dataset from memory}
@@ -51,15 +54,13 @@ names(test_df)
 The summary for each column is quite similar between these two dataframes. In fact, the minimum and maximum value are exactly the same for all columns except for the "volume" (which is comprehensible). The value for 1st and 3rd quartile as well as the mean and median is also pretty similar.
 
 ```{r - Do column types in train dataset coincide with their data? Or do I need to convert data types?}
-
 sapply(train_df, typeof)
 sapply(train_df, typeof) == sapply(test_df, typeof)
 
 ```
-The column types coincide, but the variable ProductType is of character type. Therefore, I shall dummify this column into a binary One hot encoding with caret. The remaining columns are of numerical type so no further adjustments needed here. 
+The column types coincide, but the variable ProductType is of character type. Therefore, I will dummify this column into a binary One hot encoding with caret. The remaining columns are of numerical type so no further adjustments needed here. 
 
 ```{r - Dummify the data:}
-
 #Convert categorical columns into factors to indicate that these columns contain a limited number of unique values.
 length(table(train_df$ProductType))
 
@@ -73,11 +74,12 @@ train_df
 The column ProductType has 12 possible values.
 As we previously had 18 columns in total, after dummifying the data both datasets will contain (18-1(removal of original column)+12=) 29 columns, which is what we have.
 
-```{r - Replicate same conversions to test_df:}
+Now I will perform the same process on the test dataset so both datasets remain identical and ready to use:
 
+```{r - Replicate same conversions to test_df:}
 # Rewrite the train_df with the dummy variables:
-newDataFrame <- dummyVars(" ~ .", data = test_df)
-test_df <- data.frame(predict(newDataFrame, newdata = test_df))
+newDataFrame2 <- dummyVars(" ~ .", data = test_df)
+test_df <- data.frame(predict(newDataFrame2, newdata = test_df))
 test_df
 ```
 The same 29 columns are verified here.
@@ -103,8 +105,6 @@ train_df
 test_df$BestSellersRank <- NULL
 test_df
 ```
-
-
 
 *Exploratory Data Analysis*
 
@@ -181,7 +181,7 @@ predictions <- LinearModel %>% predict(testing)
 RMSE(predictions, testing$Volume)
 R2(predictions, testing$Volume)
 ```
-Using only 1 variable and a linear regression the best results I obtained in forecasting the Volume was with the PositiveServiceReview feature. The RMSE is 558 and the R-squared is 0.37, which are two extremely high values revealing that this model is not effective and is not robust or accurate enough to be utilized with confidence.
+Using only 1 variable and a linear regression the best results I obtained in forecasting the Volume was with the PositiveServiceReview feature. The RMSE is 984 and the R-squared is 0.33, which are two extremely high values revealing that this model is not effective and is not robust or accurate enough to be utilized with confidence.
 
 Linear models, generalized linear models, and nonlinear models are examples of parametric regression models because we know the function that describes the relationship between the response and explanatory variables.
 This dataset is small and the data does not seem to follow the distributional requirements of parametric methods as can be seen below, the data is highly skewed and many features are categorical, not numerical:
@@ -223,12 +223,16 @@ Note: Below I created a multiple linear regression (which is not what the PoA as
 #Write trainSet in the data parameter instead of on each variable just to improve readability
 MLRModel<- lm(Volume ~ ., training) #Creation of a Multiple Linear Regression taking into account all variables (except obviously for the dependent one) as features to forecast the Volume;
 summary(MLRModel)
+
+pred_MLR <- predict(MLRModel, newdata = testing)
+
+postResample(pred_MLR, testing$Volume)
 ```
 
 The multiple linear regression obtained incredible results which is doubtful. Something could be wrong above. If all is correct then the dependent variable is extremely predictable looking into the independent ones. I will confirm this in the following models.
 
-
 *Let's dive into some non-parametric machine learning models now:*
+
 ```{r - Set seed & define training and test datasets}
 set.seed(107)
 
@@ -236,32 +240,114 @@ set.seed(107)
 
 ```
 
-```{r - Load missing libraries for the modeling part of this notebook}
-library(gbm)
-library(Rcpp)
+
+**Caret Model 2: Support Vector Machine (SVM)**
+```{r - SVM 10 fold cross validation}
+svmfitControl <- trainControl(method = "repeatedcv", 
+                              number = 10, # number of folds
+                              repeats = 1) #the number of complete sets of folds to compute
+```
+As asked, in this part we are supposed to train a model using Support Vector Machine, SVM, on the training set without overfitting. I decided to use 10-fold cross-validation and an Automatic Tuning Grid, which is what is coded below
+
+In order to choose the optimization metric:
+-Both RMSE and R2 quantify how well a regression model fits a dataset.
+-The RMSE tells us how well a regression model can predict the value of the response variable in absolute terms while R2 tells us how well a model can predict the value of the response variable in percentage terms.
+
+Therefore, I will use the RMSE metric as the point of this regression is to forecast the absolute Volume as accurately as possible (also the results were better utilizing this metric).
+
+```{r - Train SVM Regression model}
+svmFit1 <- train(Volume~., #y, target
+                data = training,#X, features
+                metric = 'RMSE', #Metric applied
+                method = "svmLinear", #ML algorithm
+                trControl=svmfitControl,  #Apply CV to the training
+                tuneGrid = expand.grid(C=3**(-7:7)),
+                verbose = FALSE)
+
+svmFit1
+
+```
+
+Train function chooses the model with the largest performance value (or smallest, for mean squared error in regression models), therefore there is no need to select the best iteration of the models.
+
+```{r -  Ascertain how the model prioritized each feature in the SVM training}
+varImp(svmFit1)
+```
+
+```{r - Make predictions based on SVM trained model and calculate basic metrics (with PostResample)}
+pred_SVM <- predict(svmFit1, newdata = testing)
+
+Pred_Value_SVM <- predict(svmFit1, newdata = testing)
+
+postResample(pred_SVM, testing$Volume)
+```
+
+For the testing portion of the train_df: 
+The value of the Root Mean Squared Error is ~362, taking into account that the average Volume is 700, this error is not terrible, but it is not great as well. The same goes for a Mean Absolute Error of ~264.
+The rsquared is ~0.77 which means that this models is an alright fit for this task.
+
+**Caret Model 3: Random Forest (RF)**
+```{r - RF 10 fold cross validation}
+rffitControl <- trainControl(method = "repeatedcv", 
+                              number = 10, # number of folds
+                              repeats = 1) #the number of complete sets of folds to compute
+```
+
+As asked, in this part we are supposed to train a model using Random Forest, RF, on the training set without overfitting. I decided to use 10-fold cross-validation and an Automatic Tuning Grid, which is what is coded below.
+
+I will use the RMSE metric for the same reasons as expressed above.
+
+```{r - Create grid for manual training of mtry & train Random Forest Regression model}
+rfFit1 <- train(Volume~., #y, target
+                data = training,#X, features
+                metric = 'RMSE', #Metric applied
+                method = "rf", #ML algorithm
+                trControl=rffitControl, #Apply CV to the training
+                tuneLength=100, # Number of levels for each tuning parameters that should be generated
+                verbose = FALSE)
+
+rfFit1
+
 ```
 
 
 
-**Caret Model 2: Support Vector Machine (SVM)**
+```{r -  Ascertain how the model prioritized each feature in the RF training}
+varImp(rfFit1)
+```
 
-**Caret Model 3: Random Forest (RF)**
+Similarly to the previous model, the most relevant features are by far the ones associated with reviews (as predicted).
+
+```{r - Make predictions based on RF trained model and calculate basic metrics (with PostResample)}
+pred_RF <- predict(rfFit1, newdata = testing)
+
+Pred_Value_RF <- predict(rfFit1, newdata = testing)
+
+postResample(pred_RF, testing$Volume)
+```
+
+For the testing portion of the train_df: 
+The value of the Root Mean Squared Error is ~528, taking into account that the average Volume is 700, this error is not terrible, but it is not great as well. The same goes for a Mean Absolute Error of ~165
+The rsquared is ~0.79 which means that this models is a better fit for this task than the SVM.
+
 
 **Caret Model 4: Gradient Boosting (GB)**
 
-
 ```{r - GBM 10 fold cross validation}
-gbmfitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
+gbmfitControl <- trainControl(method = "repeatedcv", 
+                              number = 10, # number of folds
+                              repeats = 1) #the number of complete sets of folds to compute
 ```
 
-Because this dataset is slightly unbalanced, I will attempt to train according to the kappa metric instead of accuracy.
-(Practically, Cohen’s kappa removes the possibility of the classifier and a random guess agreeing and measures the number of predictions it makes that cannot be explained by a random guess. Furthermore, Cohen’s kappa tries to correct the evaluation bias by taking into account the correct classification by a random guess.)
+As asked, in this part we are supposed to train a model using Gradient Boosting, GBM, on the training set without overfitting. I decided to use 10-fold cross-validation and an Automatic Tuning Grid, which is what is coded below.
+
+I will use the RMSE metric for the same reasons as expressed above.
 
 ```{r - Train Gradient Boost Classification model}
 # tuneLenght = 1 (trains with 1 mtry value for RandomForest)
-gbmFit1 <- train(brand~., #y, target
+gbmFit1 <- train(Volume~., #y, target
                  data = training, #X, features
-                 metric = 'Kappa', #Metric applied
+                 metric = 'RMSE', #Metric applied
                  method = "gbm", #ML algorithm
                  trControl=gbmfitControl, #Apply CV to the training
                  tuneLength = 10, # Number of levels for each tuning parameters that should be generated
@@ -283,202 +369,75 @@ As predicted the salary variable is the most relevant in predicting the target v
 ```{r - Make predictions based on GBM trained model and calculate basic metrics (with PostResample)}
 pred_GBM <- predict(gbmFit1, newdata = testing)
 
-Prob_pred_GBM <- predict(gbmFit1, newdata = testing, type = "prob")
+Pred_Value_GBM <- predict(gbmFit1, newdata = testing)
 
-postResample(pred_GBM, testing$brand)
+postResample(pred_GBM, testing$Volume)
 ```
 
-This model provides an accuracy of ~94% which is pretty high.
-The Kappa or Cohen's Kappa is at ~86% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
-This dataset has a slightly unbalanced target, therefore the Kappa value is quite different from the accuracy value.
-It's worth adding that if the model was trained to optimise the accuracy, the metrics accuracy and Kappa obtained would be respectively: 0.932498 0.856289. Therefore optimising this model to the metric "Kappa" is a much better alternative for this dataset as it provided better results in both metrics!
-
-
-```{r - Further metrics with confusion matrix}
-confusionMatrix(data = pred_GBM, 
-                reference = testing$brand, 
-                positive = "1")
-```
-The confusion matrix is quite solid, the auxiliary statistical metrics derived, seem to confirm so. Below, I commented how each of the metrics calculated from the confusion matrix support that the model has a good performance overall:
-- _Accuracy_: This is the most intuitive performance measure and it is simply a ratio of correctly predicted observation to the total observations ((TN+TP)/Total). Forecasting correctly ~94% of the test observations is pretty good;
-- _95% CI_: The 95% confidence interval estimates that the accuracy falls within an interval with low variation within a high performance.
-- _No information rate_: The "no-information rate" is the largest proportion of the observed classes. The test set contains 62% class 1 (Sony) and only (100-62)=38% class 0 (Acer);
-- _P-Value_: A p-value, or probability value, is a number describing how likely it is that your data would have occurred by random chance (i.e. that the null hypothesis is true). In this case the p-value is clearly smaller than the the reference of 0.05, meaning that the p-value is statistically significant and the null hypothesis may be rejected;
-
-- _Kappa_: The Kappa has been explained and commented above;
-
-- _Mcnemar's Test P-Value_: In terms of comparing two binary classification algorithms, the test is commenting on whether the two models disagree in the same way (or not). It is not commenting on whether one model is more or less accurate or error prone than another. This is clear when we look at how the statistic is calculated. In this case we have fed a confusion matrix to the function and not a contingency table (comparing simply the number of correct vs. incorrect observations while discounting the classes);
-
-- _Sensitivity_: Proportion of those who correctly received a positive result (class 1 - Sony) on this test out of those who actually have a positive result (TP/(TP+FN)). The value obtained for this metric is ~95% which is alright;
-- _Specificity_: Proportion of those who correctly received a negative result (class 0 - Acer) on this test out of those who actually have a negative result (TN/(FP+TN)). The percentage of correctly predicted Sony is higher than Acer;
-- _Pos Pred Value_: Proportion of positive results that are true positive (TP/(TP+FP));
-- _Neg Pred Value_: Proportion of negative results that are true negative (TN/(TN+FN)). This model has a higher accuracy in forecasting class 1 (Sony) relatively to class 0;
-- _Prevalence_:  Measure of the frequency of a condition in a population at a particular point in time ((TP+FN)/Total). In this case the condition measured is the positives. As can be seen this dataset is slightly unbalanced;
-- _Detection Rate_: Here the detection rate is defined as the fraction of observations who are in fact positive and are called positive by the model (TP/Total). Fortunately, this percentage is similar to the prevalence meaning that the model captured the class skewness of this dataset. If the value was too different the False Negatives would be hindering the model's performance;
-- _Detection Prevalence_: This is defined as the number of predicted positive events (both true positive and false positive) divided by the total number of predictions ((TP+FP)/Total). This value is similar to what was obtained in the prevalence metric, this indicates that the amount of false negatives is simillar to the false positives when considering the whole test dataset;
-- _Balanced Accuracy_: Balanced accuracy attempts to account for the imbalance in classes ((TPR+TNR)/2 = (Sensitivity+Specificity)/2). The balanced accuracy is slightly lower than the accuracy. Nonetheless, this metric is at 92%, thus this model clearly captured the data unbalance and is not just supposing that the most frequent class is the correct one (in this case the balanced accuracy would be 50% and the accuracy would coincide with the proportion of the most frequent class relatively to the less occuring one).
-
-```{r - Calculate two class summary for binary GBM model}
-temp_pred_GB = factor(ifelse(pred_GBM == 1, "Y", "N"))
-temp_obs_GB = factor(ifelse(testing$brand == 1, "Y", "N"))
-
-twoClassSummary(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
-#For some reason, this function does not seem to provide ROC results if a binary numerical labeling is used, I had to convert '1' into 'Y' and '0' into 'N' to obtain valid results
-
-mnLogLoss(data = data.frame(obs = temp_obs_GB, pred = temp_pred_GB, Y = Prob_pred_GBM$'1', N = Prob_pred_GBM$'0'), lev = levels(temp_pred_GB))
-```
-The area under the ROC curve is close to 1 meaning that the classifier is far better than a random classifier (AUC of 0.5). In fact, the AUC is close to 1, a perfect classifier. The value of the specificity and specificity seem to have swapped among themselves (the values calculated in the function above are the correct ones), thus, I will not comment these values.
-- _Log Loss_: Log-loss is indicative of how close the prediction probability is to the corresponding actual/true value (0 or 1 in case of binary classification). The more the predicted probability diverges from the actual value, the higher is the log-loss value. In the case of the LogLoss metric, one usual "well-known" metric is to say that 0.693 is the non-informative value. This figure is obtained by predicting p = 0.5 for any class of a binary problem. This is valid only for balanced binary problems. 
-Because we have obtained a Log Loss of 0.218, much lower than 0.693, we can afirm that this model is clearly better than random picking and has captured the problem.
-
-**Caret Model 2: Use Random Forest with 10-fold cross-validation to predict nominal data and manually tune 5 different mtry values**
-
-```{r - RF 10 fold cross validation}
-rffitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 1)
-```
-
-In this task we have to manually tune 5 different values for the "mtry" parameter.The "mtry" is the number of variables randomly sampled as candidates at each split. Note that the default values are different for classification (sqrt(p) where p is number of variables in x) and regression (p/3). In this case we are foing a classification thus the default value is sqrt(36) which is 6. I started by centering center the grid search in the default value and search equidistantly on both sides (upper and lower) of this value. However, I verified that the optimal performance falls in a higher value of "mtry".
-
-Similarly to the model trained above, I will optimise towards the Kappa metric.
-
-```{r - Create grid for manual training of mtry & train Random Forest Regression model}
-rfGrid <- expand.grid(mtry=c(6,9,10,11,12))
-
-# tuneLenght = 1 (trains with 1 mtry value for RandomForest)
-rfFit1 <- train(brand~., #y, target
-                data = training,#X, features
-                metric = 'Kappa', #Metric applied
-                method = "rf", #ML algorithm
-                trControl=rffitControl, #Apply manual grid search to the training
-                tuneGrid=rfGrid, #Grid parameters
-                verbose = FALSE)
-
-rfFit1
-```
-
-As asked, in this part we are supposed to train a model using Random Forest, RF, on the training set with 10-fold cross-validation and an manual Tuning Grid, which is what is coded above.
-
-Train function chooses the model with the largest performance value (or smallest, for mean squared error in regression models), therefore there is no need to select the best iteration of the models.
-
-
-```{r -  Ascertain how the model prioritized each feature in the RF training}
-varImp(rfFit1)
-```
-
-Similarly to the previous model, salary once again is the most relevant feature in predicting the target variable. Again, age comes in a second place. Credit has a much higher relative importance, however, it is clearly less important than the two top features. The remaining variables have a really low relative impact when forecasting the target.
-
-```{r - Make predictions based on RF trained model and calculate basic metrics (wuth PostResample)}
-pred_RF <- predict(rfFit1, newdata = testing)
-
-Prob_pred_RF <- predict(rfFit1, newdata = testing, type = "prob")
-
-postResample(pred_RF, testing$brand)
-
-```
-
-This model provides an accuracy of ~94% which is pretty high.
-This dataset has a slightly imbalanced target, therefore the Kappa value is quite different from the accuracy value.
-The Kappa or Cohen's Kappa is at ~86% which is quite impressive since this metric is normalized at the baseline of random chance on our dataset.
-
-
-```{r - Further metrics of RF with confusion matrix}
-confusionMatrix(data = pred_RF, 
-                reference = testing$brand, 
-                positive = "1")
-```
-Similarly to the previous model, the confusion matrix is quite solid, the auxiliary statistical metrics derived, seem to confirm so. The two models created in this exercise are quite similar in theory and in the provided results. Therefore, instead of repeating the comment section I have written for the previous model, I will just say that those comments can be applied to this model and move on to the next part (Additionaly, this model is slightly inferior relatively to the GBM thus I chose to focus in the other).
-
-
-```{r - Calculate two class summary for binary RF model}
-temp_pred_RF = factor(ifelse(pred_RF == 1, "Y", "N"))
-temp_obs_RF = factor(ifelse(testing$brand == 1, "Y", "N"))
-
-twoClassSummary(data = data.frame(obs = temp_obs_RF, pred = temp_pred_RF, Y = Prob_pred_RF$'1', N = Prob_pred_RF$'0'), lev = levels(temp_pred_RF))
-#For some reason, this function does not seem to provide ROC results if a binary numerical labeling is used, I had to convert '1' into 'Y' and '0' into 'N' to obtain valid results
-
-
-mnLogLoss(data = data.frame(obs = temp_obs_RF, pred = temp_pred_RF, Y = Prob_pred_RF$'1', N = Prob_pred_RF$'0'), lev = levels(temp_pred_RF))
-```
-
-The area under the ROC curve is close to 1 meaning that the classifier is far better than a random classifier (AUC of 0.5). In fact, the AUC is close to 1, a perfect classifier. The value of the specificity and specificity seem to have swapped among themselves (the values calculated in the function above are the correct ones), thus, I will not comment these values.
-- _Log Loss_: Log-loss is indicative of how close the prediction probability is to the corresponding actual/true value (0 or 1 in case of binary classification). The more the predicted probability diverges from the actual value, the higher is the log-loss value. In the case of the LogLoss metric, one usual "well-known" metric is to say that 0.693 is the non-informative value. This figure is obtained by predicting p = 0.5 for any class of a binary problem. This is valid only for balanced binary problems. 
-Because we have obtained a Log Loss of 0.218, much lower than 0.693, we can afirm that this model is clearly better than random picking and has captured the problem.
+For the testing portion of the train_df: 
+The value of the Root Mean Squared Error is ~672, taking into account that the average Volume is 700, this error is not terrible, but it is not great as well. The same goes for a Mean Absolute Error of ~551.
+The rsquared is ~0.70.
 
 
 
+*Compare the results from the 3 models:*
 
-*Compare the results from two models:*
 ```{r - Compare results}
-results <- resamples(list(GBMAut=gbmFit1, RFMan=rfFit1))
+results <- resamples(list(SVM = svmFit1, GBM=gbmFit1, RF=rfFit1))
 
 summary(results)
 
-bwplot(results)
+bwplot(results, metric = 'MAE')
+bwplot(results, metric = 'RMSE')
+bwplot(results, metric = 'Rsquared')
 ```
-Looking at the table and boxplot of the chunk above it seems that both algorithms have a good performance in forecasting the target of this problem. However, the Stochastic Gradient Boost seems to provide a slightly better performing model as the interquartile range for both the accuracy and kappa falls is located at a higher value.
+I have plotted the 3 metrics individually due an issue where the x window size is the same for all plots making the Rsquared plot useless.
+
+Anyhow, looking firstly at the MAE plot, the RF is clearly the best performing model as it has the smallest mean average error.
+The RMSE is not so clear. The GBM plot seems to be the worse. Between RF and SVM, RF has a much larger 3rd quartile value, but the median of the former is slightly smaller than SVM.
+Finally, the Rsquared of the RF is clearly the best one.
+
+In conclusion, I believe that the RF is the best performing model.
 
 
 *Forecast testing dataset with the best performing model (GBM)*
 
+The pre-process applied on train_df has been equally applied on test_df, therefore no further processing is needed to use this dataset.
 
-```{r - Make dummy variable for caret}
-OneHot_test_df <- data.frame(model.matrix( ~ ., data=test_df))
-OneHot_test_df <- subset(OneHot_test_df, select=-c(brand1)) # Remove target column
-```
 
 
 ```{r - Calculate the prediction with the best model trained above:}
-prediction<-predict(gbmFit1,OneHot_test_df)
+prediction<-predict(rfFit1, test_df)
 ```
 
 
-```{r - Post resampling for accuracy and Kappa of model in test dataset:}
+```{r - Post resampling for results of model in test dataset:}
 
-postResample(prediction, test_df$brand)
+postResample(prediction, test_df$Volume)
 
 ```
 
-Not surprisingly the Accuracy and Kappa are absolutely awful. As mentioned before, the values for the target column of the test dataset seem to have been filled arbitrarily and should not be payed any attention. Therefore, we cannot measure the actual accuracy or any other metric in the test dataset, as there is no true column to compare the forecast against. We must believe that the population from the test dataset behaves similarly to the train dataset and that both datasets have been picked randomly (otherwise the population could have suffer sample selection bias)
+Not surprisingly the RMSE, Rsquared and MAE are absolutely awful. As mentioned before, the values for the target column of the test dataset seem to have been filled arbitrarily and should not be payed any attention. Therefore, we cannot measure the actual accuracy or any other metric in the test dataset, as there is no true column to compare the forecast against. We must believe that the population from the test dataset behaves similarly to the train dataset and that both datasets have been picked randomly (otherwise the population could have suffer sample selection bias)
 
 ```{r - Summary of prediction:}
 summary(prediction)
 ```
 
 ```{r - Preferred computer brand comparison in the train, test and both datasets:}
-#Computer Brand
-barplot(table(train_df$brand),names.arg = c('Acer','Sony'))
-
-barplot(table(prediction),names.arg = c('Acer','Sony'))
-
-TotalTarget <- data.frame(TestTrain = c(train_df$brand, prediction))
-barplot(table(TotalTarget),names.arg = c('Acer','Sony'))
-
+hist(train_df$Volume)
+#hist(test_df$Volume) #Useless
+hist(prediction)
 ```
 
 
-```{r - Plot chart to compare proportion of computer brands between Train and predictions}
-# create a dataset
-Dataset <- c("Train Dataset", "Predictions","Train Dataset", "Predictions")
-Brand <- c("Sony","Sony","Acer","Acer")
-PercentageCount <- c(table(train_df$brand)["0"],
-           table(train_df$brand)["1"],
-           table(prediction)["0"],
-           table(prediction)["1"])
-data <- data.frame(Dataset,Brand,Count)
+```{r}
+output <- test_df
 
-# Stacked + percent
-ggplot(data, aes(fill=Brand, y=PercentageCount, x=Dataset)) + 
-    geom_bar(position="fill", stat="identity") +
-    ylab("Percentage Count")
+output$predictions <- prediction
+write.csv(output, file="C2.T3output.csv", row.names = TRUE)
 ```
-As can be seen above, the proportion of preferred computer brand is the same for both datasets, this supports the thesis that both datasets refer to a similarlly behaving population (if no the same) and that the model trained in the first dataset can be applied on the second.
 
-```{r - Add column with predictions and save into .tab file}
 
-test_df$prediction <- prediction
-test_df
-write_tsv(test_df,"SurveyIncomplete_WithPreds.tab")
-```
 
 
 In conclusion, Blackwell's customers typically prefer Sony as their computer brand comparatively to Acer, and this can be forecast with a high accuracy.
