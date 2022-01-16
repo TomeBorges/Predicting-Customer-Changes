@@ -50,6 +50,13 @@ length(tr)
 table(size(tr)) 
 ```
 
+Note that we have two transactions without any purchased item. These will be removed:
+
+```{r - Remove empty transactions}
+tr <- tr[which(size(tr) != 0)]
+table(size(tr)) 
+```
+Done! Dataset is clean(er) now.
 
 ```{r - See the item labels}
 itemLabels(tr)
@@ -61,7 +68,6 @@ As mentioned in the PoA, the dataset contains 125 different items.
 summary(tr)
 ```
 
-
 Looking at the summary above, the following takeaways can be taken:
 -Blackwell has given us 9835 transactions to analyze and 125 items (columns) can be puchased.
 -The density is 0.035 meaning that a total of 9835 x 125 x 0.035 = 43104 items have been purchased in total. This can be confirmed by adding up the most frequent items.
@@ -71,28 +77,110 @@ Looking at the summary above, the following takeaways can be taken:
   3. *CYBERPOWER Gamer Desktop* with 1809 purchases;
   4. *Apple Earpods* with 1715 purchases;
   5. *Apple MacBook Air* with 1530 purchases.
-- Looking at the size of the transactions: (2 transactions were for 0 items, this should be cleaned), 2163 transactions were for just 1 item, 1647 transactions for 2 items, all the way up to the biggest transaction: 1 transaction for 30 items. This indicates that most customers buy a small number of items in each transaction.
--Additionally the size of purchases seems right skewed (as the mean is larger than the median an as can be seen below in the barplot of the table of transaction sizes);
-
-
-```{r - Top 20 items purchased by frequency}
+  
+```{r - Top 20 items purchased by frequency in absolute and relative terms}
 itemFrequencyPlot(tr, topN=20, type='absolute')
+itemFrequencyPlot(tr, topN=20, type='relative')
 ```
+
+- Looking at the size of the transactions: (2 transactions were for 0 items, these have been cleaned), 2163 transactions were for just 1 item, 1647 transactions for 2 items, all the way up to the biggest transaction: 1 transaction for 30 items. This indicates that most customers buy a small number of items in each transaction.
+-Additionally the size of purchases seems right skewed (as the mean is larger than the median an as can be seen below in the barplot of the table of transaction sizes) as can be seen below:
 
 ```{r - Quantity of items purchased per transaction}
 barplot(table(size(tr)))
 ```
 
-```{r}
-rules <- apriori(tr, parameter = list(supp=0.001, conf=0.8))
+
+```{r - Which items were purchased in each transaction}
+image(sample(tr, 25))
+```
+The graph above shows which items are more frequently purchased. There is a dense zone in between items 60 and 80. This seems to be the Apple products that begin with the letter 'i'.
+
+*Use Apriori algorithm to discover any relationships between the items within the Electronidex's transactions*
+
+"The Apriori algorithm is helpful when working with large datasets and is used to uncover insights pertaining to transactional datasets. It is based on item frequency.
+The Apriori algorithm assesses association rules using two types of measurements. The first statistical measure is the Support measurement, which measures itemsets or rules frequency within your transactional data.The second statistical measure is the Confidence measurement, which measures the accuracy of the rules. A rule that measures high in both support and confidence is known as a strong rule."
+
+
+The apriori parameters parameters are requesting that the rules cover 1% of the transactions (the dataset is quite large, therefore the original 10% ~983 rows is a lot for this purpose) and are 80% correct.
+
+The most important definitions to understand the apriori algorithm are:
+**Support**: This says how popular an itemset is, as measured by the proportion of transactions in which an itemset appears.
+ - Support{X} = Number Of X in transaction/Number of total transactions
+**Confidence**: This says how likely item Y is purchased when item X is purchased, expressed as {X -> Y}. This is measured by the proportion of transactions with item X, in which item Y also appears.
+ - Confidence{X->Y} = Support{X,Y}/Support{X}
+**Lift**: This says how likely item Y is purchased when item X is purchased, while controlling for how popular item Y is. A lift of 1 implies no association between items. A lift value greater than 1 means that item Y is likely to be bought if item X is bought, while a value lower thatn 1 means that item Y is unlikekly to be bought is item X is bought:
+ - Lift(X->Y) = Support{X,Y}/(Support{X}*Support{Y})
+```{r - Apriori parameters}
+rules <- apriori(tr, parameter = list(supp=0.01, conf=0.5,minlen=2))
 rules <- sort(rules, by='confidence', decreasing = TRUE)
 summary(rules)
 
-inspect(rules[1:10])
+```
 
+Note:
+Apriori only creates rules with one item in the RHS (Consequent)! The default value in '>APparameter for minlen is 1. This means that rules with only one item (i.e., an empty antecedent/LHS) like
+\{\} => \{beer\}
+will be created. These rules mean that no matter what other items are involved, the item in the RHS will appear with the probability given by the rule's confidence (which equals the support). In order to avoid these rules I used the argument parameter=list(minlen=2).
+
+
+```{r - Apriori rules vizualization - Written rules}
+inspect(rules)
+#inspect(rules[1:10])
+```
+
+This level of support and confidence provides 19 rules. The rule with the best confidence is slightly larger than 60% and a support of 1.07%.
+
+*Sort model according to different metrics in order to improve the results:*
+
+Above the model was sort according to the confidence, thuerefore I will not repeat the same inspection. I will move on into support.
+```{r - Sort apriori rules according to support}
+inspect(sort(rules, by = "support"))
+```
+
+```{r - Sort apriori rules according to support}
+inspect(sort(rules, by = "support"))
+```
+
+```{r - Sort apriori rules according to lift}
+inspect(sort(rules, by = "lift"))
+```
+
+Redundant rules should be discarded to reduce the complexity of the model. Redundant rules are equivalent to a negative or zero improvement as defined by Bayardo et al. (2000).
+Now, verify if any rule is redundant:
+```{r}
+is.redundant(rules)
+
+redundant <- which(is.redundant(rules))
+redundant
+```
+No rule is redundant, therefore there is no need to remove any of them.
+
+```{r - Remove reduntant rules:}
+rules <- rules[-redundant]
+
+inspect(rules)
+```
+
+
+**Analyse rules for a given object**
+```{r - RUles containing "HP Laptop"}
+ItemRules <- subset(rules, items %in% "HP Laptop")
+inspect(ItemRules)
+```
+
+```{r - RUles containing "iMac"}
+ItemRules <- subset(rules, items %in% "iMac")
+inspect(ItemRules)
+```
+
+Below, the rules with the Top 10 confidence levels and respective lift (colour) has been plotted.
+```{r - Apriori rules vizualization 2 - plot}
 topRules <- rules[1:10]
 plot(topRules)
 ```
+
+
 ```{r}
 plot(topRules, method="graph")
 ```
@@ -516,12 +604,7 @@ write.csv(output, file="C2.T3output.csv", row.names = TRUE)
 
 
 
-```{r}
-library(babynames)
-data <- babynames %>% 
-  filter(name %in% c("Mary","Emma", "Ida", "Ashley", "Amanda", "Jessica", "Patricia", "Linda", "Deborah","Dorothy", "Betty", "Helen")) %>%
-  filter(sex=="F")
-```
+
 
 ```{r}
 plot_train_df<- read.csv("existingproductattributes2017.csv")#Clients who included their favorite computer brand in the questionaire answers
