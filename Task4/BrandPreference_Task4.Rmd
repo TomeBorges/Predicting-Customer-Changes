@@ -101,18 +101,12 @@ The graph above shows which items are more frequently purchased. There is a dens
 "The Apriori algorithm is helpful when working with large datasets and is used to uncover insights pertaining to transactional datasets. It is based on item frequency.
 The Apriori algorithm assesses association rules using two types of measurements. The first statistical measure is the Support measurement, which measures itemsets or rules frequency within your transactional data.The second statistical measure is the Confidence measurement, which measures the accuracy of the rules. A rule that measures high in both support and confidence is known as a strong rule."
 
+The suggested parameters are requesting that the rules cover 10% of the transactions (the dataset is quite large, therefore the original 10% ~983 rows is a lot for this purpose) and are 80% correct. With these parameters no rules are found, because this shop offers a wide range of items and repetitions are not found too often. 
+In order to catch any rule, I reduced the support to 1% and the confidence to 30%.
+ 
 
-The apriori parameters parameters are requesting that the rules cover 1% of the transactions (the dataset is quite large, therefore the original 10% ~983 rows is a lot for this purpose) and are 80% correct.
-
-The most important definitions to understand the apriori algorithm are:
-**Support**: This says how popular an itemset is, as measured by the proportion of transactions in which an itemset appears.
- - Support{X} = Number Of X in transaction/Number of total transactions
-**Confidence**: This says how likely item Y is purchased when item X is purchased, expressed as {X -> Y}. This is measured by the proportion of transactions with item X, in which item Y also appears.
- - Confidence{X->Y} = Support{X,Y}/Support{X}
-**Lift**: This says how likely item Y is purchased when item X is purchased, while controlling for how popular item Y is. A lift of 1 implies no association between items. A lift value greater than 1 means that item Y is likely to be bought if item X is bought, while a value lower thatn 1 means that item Y is unlikekly to be bought is item X is bought:
- - Lift(X->Y) = Support{X,Y}/(Support{X}*Support{Y})
 ```{r - Apriori parameters}
-rules <- apriori(tr, parameter = list(supp=0.01, conf=0.5,minlen=2))
+rules <- apriori(tr, parameter = list(supp=0.01, conf=0.3,minlen=2))
 rules <- sort(rules, by='confidence', decreasing = TRUE)
 summary(rules)
 
@@ -124,26 +118,41 @@ Apriori only creates rules with one item in the RHS (Consequent)! The default va
 will be created. These rules mean that no matter what other items are involved, the item in the RHS will appear with the probability given by the rule's confidence (which equals the support). In order to avoid these rules I used the argument parameter=list(minlen=2).
 
 
+Before going into any further detail, it is important to understand what each metric of the apriori algorithm means:
+**Support**: This says how popular an itemset is, as measured by the proportion of transactions in which an itemset appears.
+ - Support{X} = Number Of X in transaction/Number of total transactions;
+**Coverage**: THis metric is simillar to the support metric except for the fact that it only takes into account the LHS of the transaction rule. Therefore, this metric is always larger (or equal if this combination is only purchased with the RHS of the rule included) than the support.
+**Confidence**: This says how likely item Y is purchased when item X is purchased, expressed as {X -> Y}. This is measured by the proportion of transactions with item X, in which item Y also appears.
+ - Confidence{X->Y} = Support{X,Y}/Support{X}
+**Lift**: This says how likely item Y is purchased when item X is purchased, while controlling for how popular item Y is. A lift of 1 implies no association between items. A lift value greater than 1 means that item Y is likely to be bought if item X is bought, while a value lower than 1 means that item Y is unlikekly to be bought is item X is bought:
+ - Lift(X->Y) = Support{X,Y}/(Support{X}*Support{Y})
+
+
 ```{r - Apriori rules vizualization - Written rules}
 inspect(rules)
 #inspect(rules[1:10])
 ```
 
-This level of support and confidence provides 19 rules. The rule with the best confidence is slightly larger than 60% and a support of 1.07%.
+
+This level of support and confidence provides 203 rules. The rule with the best confidence is slightly larger than 60% with a support of 1.07%.
 
 *Sort model according to different metrics in order to improve the results:*
 
-Above the model was sort according to the confidence, thuerefore I will not repeat the same inspection. I will move on into support.
-```{r - Sort apriori rules according to support}
-inspect(sort(rules, by = "support"))
-```
+Above the model was sort according to the confidence, therefore I will not repeat the same inspection. I will move on to support.
 
 ```{r - Sort apriori rules according to support}
 inspect(sort(rules, by = "support"))
 ```
+The rule with the highest support has got 7.5%. This metric on its own is not robust. We have to look into the confidence and lift in order to get a better understanding. Anyhow, these are the transactions that were most often verified, and therefore will probably be more relevant towards the majority of clients.
+Just to verify, the order of the rules sorted according to count are in fact the same as the support. This makes sense as support is nothing else but the count of how many times a rule is verified divided by the total amount of transactions.
+```{r - Sort apriori rules according to count}
+inspect(sort(rules, by = "count"))
+```
 
-```{r - Sort apriori rules according to lift}
+The transaction rules could be additionally sorted according to the remaining metrics.
+```{r - Sort apriori rules according to lift & coverage}
 inspect(sort(rules, by = "lift"))
+inspect(sort(rules, by = "coverage"))
 ```
 
 Redundant rules should be discarded to reduce the complexity of the model. Redundant rules are equivalent to a negative or zero improvement as defined by Bayardo et al. (2000).
@@ -154,7 +163,7 @@ is.redundant(rules)
 redundant <- which(is.redundant(rules))
 redundant
 ```
-No rule is redundant, therefore there is no need to remove any of them.
+Only two rules are redundant, remove them to reduce entropy of this model and analysis.
 
 ```{r - Remove reduntant rules:}
 rules <- rules[-redundant]
@@ -164,15 +173,23 @@ inspect(rules)
 
 
 **Analyse rules for a given object**
+The two most common objects in the right hand side of the rule are by far the "HP Laptop" and the "iMac", in this section I will analyse individually each of these objects:
+
 ```{r - RUles containing "HP Laptop"}
 ItemRules <- subset(rules, items %in% "HP Laptop")
 inspect(ItemRules)
 ```
 
-```{r - RUles containing "iMac"}
+```{r - Rules containing "iMac"}
 ItemRules <- subset(rules, items %in% "iMac")
 inspect(ItemRules)
 ```
+
+```{r - RUles containing remaining objects}
+ItemRules <- subset(rules, !items %in% c("HP Laptop","iMac"))
+inspect(ItemRules)
+```
+
 **Visualize the results**
 
 ```{r}
@@ -181,34 +198,40 @@ library(colorspace) # for sequential_hcl
 
 
 Below, the rules with the Top 10 confidence levels and respective lift (colour) has been plotted.
+```{r - Define top rules according to different measures}
+topRulesConfidence <- rules[1:10]
+topRulesSupport <- sort(rules, by = "support")[1:10]
+```
+
 ```{r - Apriori rules vizualization 2 - Scatterplot}
-topRules <- rules[1:10]
-plot(topRules, control=list(col=rainbow(2)))
+plot(topRulesConfidence, control=list(col=rainbow(2)))
+plot(topRulesSupport, control=list(col=rainbow(2)))
 ```
 
 ```{r - Parallel coordinates}
-plot(rules, method="paracoord", control=list(reorder=TRUE))
+plot(topRulesConfidence, method="paracoord", control=list(reorder=TRUE))
+plot(topRulesSupport, method="paracoord", control=list(reorder=TRUE))
 ```
 
 
 ```{r - Apriori rules vizualization 2 - Graph}
-plot(topRules, method="graph",control=list(col=rainbow(2)))
+plot(topRulesConfidence, method="graph",control=list(col=rainbow(2)))
+plot(topRulesSupport, method="graph",control=list(col=rainbow(2)))
 ```
 
 ```{r}
-tr
-```
-
-
-```{r}
-
-plot(topRules, method="graph", control=list(engine = "igraph"))
+plot(topRulesConfidence, method="graph", control=list(engine = "igraph"))
+plot(topRulesSupport, method="graph", control=list(engine = "igraph"))
 ```
 
 
 ```{r}
-png(file="filename.png", width=6, height=6, units="in", res=400)
-plot(topRules, method = "grouped")
+png(file="GroupedTransactions.png", width=8, height=6, units="in", res=400)
+plot(topRulesConfidence, method = "grouped")
+dev.off()
+
+png(file="GroupedTransactions.png", width=8, height=6, units="in", res=400)
+plot(topRulesSupport, method = "grouped")
 dev.off()
 ```
 
