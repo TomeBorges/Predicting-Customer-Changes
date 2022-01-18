@@ -193,6 +193,31 @@ inspect(ItemRules)
 **Visualize the results**
 
 ```{r}
+hist(inspect(rules)$support)                                   # Draw histogram
+abline(v = median(inspect(rules)$support),                     # Add line for median
+       col = "red",
+       lwd = 3)
+text(x = median(inspect(rules)$support) * 1.7,                 # Add text for median
+     y = median(inspect(rules)$support) * 1.7,
+     paste("Median =", median(inspect(rules)$support)),
+     col = "red",
+     cex = 2)
+```
+
+```{r}
+hist(inspect(rules)$confidence)                                   # Draw histogram
+abline(v = median(inspect(rules)$confidence),                     # Add line for median
+       col = "red",
+       lwd = 3)
+text(x = median(inspect(rules)$confidence) * 1.7,                 # Add text for median
+     y = median(inspect(rules)$confidence) * 1.7,
+     paste("Median =", median(inspect(rules)$confidence)),
+     col = "red",
+     cex = 2)
+```
+
+
+```{r}
 library(colorspace) # for sequential_hcl
 ```
 
@@ -226,11 +251,11 @@ plot(topRulesSupport, method="graph", control=list(engine = "igraph"))
 
 
 ```{r}
-png(file="GroupedTransactions.png", width=8, height=6, units="in", res=400)
+png(file="GroupedTransactions_TopConfidence.png", width=8, height=6, units="in", res=400)
 plot(topRulesConfidence, method = "grouped")
 dev.off()
 
-png(file="GroupedTransactions.png", width=8, height=6, units="in", res=400)
+png(file="GroupedTransactions_TopSupport.png", width=8, height=6, units="in", res=400)
 plot(topRulesSupport, method = "grouped")
 dev.off()
 ```
