@@ -193,25 +193,25 @@ inspect(ItemRules)
 **Visualize the results**
 
 ```{r}
-hist(inspect(rules)$support)                                   # Draw histogram
-abline(v = median(inspect(rules)$support),                     # Add line for median
+support_series <-inspect(rules)$support
+hist(support_series)                                  # Draw histogram
+abline(v = median(support_series),                     # Add line for median
        col = "red",
        lwd = 3)
-text(x = median(inspect(rules)$support) * 1.7,                 # Add text for median
-     y = median(inspect(rules)$support) * 1.7,
-     paste("Median =", median(inspect(rules)$support)),
+text(x = median(support_series) * 1.7,                 # Add text for median
+     y = median(support_series) * 1.7,
+     paste("Median =", median(support_series)),
      col = "red",
      cex = 2)
-```
 
-```{r}
-hist(inspect(rules)$confidence)                                   # Draw histogram
-abline(v = median(inspect(rules)$confidence),                     # Add line for median
+confidence_series<-inspect(rules)$confidence
+hist(confidence_series)                                   # Draw histogram
+abline(v = median(confidence_series),                     # Add line for median
        col = "red",
        lwd = 3)
-text(x = median(inspect(rules)$confidence) * 1.7,                 # Add text for median
-     y = median(inspect(rules)$confidence) * 1.7,
-     paste("Median =", median(inspect(rules)$confidence)),
+text(x = median(confidence_series) * 1.7,                 # Add text for median
+     y = median(confidence_series) * 1.7,
+     paste("Median =", median(confidence_series)),
      col = "red",
      cex = 2)
 ```
@@ -236,6 +236,17 @@ plot(topRulesSupport, control=list(col=rainbow(2)))
 ```{r - Parallel coordinates}
 plot(topRulesConfidence, method="paracoord", control=list(reorder=TRUE))
 plot(topRulesSupport, method="paracoord", control=list(reorder=TRUE))
+```
+
+
+```{r}
+topRulesConfidenceNot <- subset(rules, !items %in% c("HP Laptop","iMac"))[1:8]
+topRulesSupportNot <- sort(subset(rules, !items %in% c("HP Laptop","iMac")), by = "support")[1:8]
+
+plot(topRulesConfidenceNot, method="paracoord", control=list(reorder=TRUE))
+plot(topRulesSupportNot, method="paracoord", control=list(reorder=TRUE))
+
+
 ```
 
 
